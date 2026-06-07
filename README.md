@@ -1,38 +1,37 @@
-# HealthSync — Full Setup Guide
+# HealthSync — Setup & Developer Guide
 
-A health tracking web app with a **Vue 3** frontend and **Node.js + Express + PostgreSQL** backend.
-The app shows dashboards for steps, sleep, heart rate, oxygen, and activities.
-Health data is imported automatically from Google Drive CSVs via a Python pipeline.
+A health tracking web app. Vue 3 frontend, Node.js/Express backend, PostgreSQL database.
+Pulls health data (steps, sleep, heart rate, oxygen, activities) from Samsung Health exports via Google Drive.
 
 ---
 
-## How it works (big picture)
+## How it works
 
 ```
 Samsung Health app
-      ↓ exports CSVs
-Google Drive folders  ←──────────────────────────────────────┐
-      ↓                                                       │
-Python pipeline (HealthsyncServerApp/)                        │
-  - Runs every 15 minutes                                     │
-  - Downloads new CSVs from Drive                             │
-  - Converts them → inserts into PostgreSQL DB                │
-      ↓                                                       │
-PostgreSQL database (healthsync)                              │
-      ↓                                                       │
-Node.js backend (server.js)                                   │
-  - REST API with JWT auth                                    │
-  - Serves the Vue frontend                                   │
-      ↓                                                       │
-Browser → http://localhost:3000  ─────────────────────────────┘
+      ↓  exports CSVs
+Google Drive folders
+      ↓
+Python pipeline (HealthsyncServerApp/)
+  • runs every 15 min
+  • downloads new CSVs from Drive
+  • converts them and inserts into DB
+      ↓
+PostgreSQL database
+      ↓
+Node.js backend (server.js)
+  • REST API with JWT auth
+  • serves the built Vue frontend
+      ↓
+Browser → http://localhost:3000
 ```
 
 ---
 
-## What you need installed
+## Requirements
 
 - [Node.js](https://nodejs.org/) v18+
-- [Python](https://www.python.org/) 3.10+
+- [Python](https://www.python.org/) 3.10+  *(only needed for the pipeline)*
 - [PostgreSQL](https://www.postgresql.org/download/) v14+
 - Git
 
@@ -49,13 +48,11 @@ cd HealthSyncVmServerClient
 
 ## Step 2 — Set up PostgreSQL
 
-Open a terminal and run:
-
 ```bash
 sudo -u postgres psql
 ```
 
-Inside psql, paste this:
+Inside psql:
 
 ```sql
 CREATE USER healthsync_user WITH PASSWORD 'Bartal123!';
@@ -64,7 +61,7 @@ GRANT ALL PRIVILEGES ON DATABASE healthsync TO healthsync_user;
 \q
 ```
 
-Then import the full database (schema + existing data):
+Import the database (schema + all existing data):
 
 ```bash
 PGPASSWORD=Bartal123! psql -U healthsync_user -h localhost -d healthsync -f healthsync_dump.sql
@@ -72,9 +69,9 @@ PGPASSWORD=Bartal123! psql -U healthsync_user -h localhost -d healthsync -f heal
 
 ---
 
-## Step 3 — Configure the backend (.env)
+## Step 3 — Create the .env file
 
-Create a `.env` file in the **root folder** of the repo:
+Create a file called `.env` in the **root of the repo** (same folder as `server.js`):
 
 ```
 PORT=3000
@@ -91,25 +88,26 @@ EMAIL_PASS=
 APP_URL=http://localhost:3000
 ```
 
-**What each variable does:**
+**What each line does:**
 
-| Variable | What it's for |
+| Variable | What it does |
 |---|---|
-| `PORT` | Which port the app runs on |
-| `JWT_SECRET` | Secret key used to sign login tokens — can be any long random string |
-| `DB_HOST` | Where PostgreSQL is running (`localhost` for your own machine) |
-| `DB_USER` / `DB_PASSWORD` | The DB user you created in Step 2 |
+| `PORT` | Port the app runs on. `3000` means `http://localhost:3000` |
+| `JWT_SECRET` | Used to sign login tokens. Can be any long random string — just don't change it while users are logged in or they'll get logged out |
+| `DB_HOST` | Where PostgreSQL is. `localhost` if it's on your own machine |
+| `DB_USER` | The PostgreSQL user you created above |
+| `DB_PASSWORD` | Password for that user |
 | `DB_NAME` | The database name |
-| `EMAIL_USER` / `EMAIL_PASS` | Gmail address + app password for sending password reset emails (optional) |
-| `APP_URL` | Your server's address — used in reset email links |
+| `DB_PORT` | PostgreSQL port — almost always `5432` |
+| `EMAIL_USER` | Gmail address to send password reset emails from (optional) |
+| `EMAIL_PASS` | Gmail **app password** (not your normal password). Get one at: Google Account → Security → 2-Step Verification → App passwords |
+| `APP_URL` | Used in password reset links. Change to your IP/domain if running on a server |
 
-> **EMAIL_USER / EMAIL_PASS** — only needed if you want password reset emails to work.
-> To get an app password: Google Account → Security → 2-Step Verification → App passwords.
-> Leave blank if you don't need it.
+> **EMAIL is optional.** If you leave it blank, the app still works — password reset emails just won't send.
 
 ---
 
-## Step 4 — Install and build
+## Step 4 — Install dependencies and build the frontend
 
 ```bash
 # Backend
@@ -122,127 +120,197 @@ npm run build
 cd ..
 ```
 
-The `npm run build` compiles the Vue app into `frontend/dist/` — the backend automatically serves it.
+`npm run build` compiles the Vue app into `frontend/dist/`. The backend serves it automatically.
 
 ---
 
-## Step 5 — Start the app
+## Step 5 — Run the app
 
 ```bash
 node server.js
 ```
 
-Open your browser: **http://localhost:3000**
+Open **http://localhost:3000** — you'll see the login page.
 
-You'll see the login page. You can register a new account or use a test account:
+**Test accounts** (already in the DB dump, password is the same for all):
 
-| Email | Password |
-|---|---|
-| `talhakere@gmail.com` | `Password123!` |
-| `talhayigit142@gmail.com` | `Password123!` |
-| `alex.k.kaczmarczyk@gmail.com` | `Password123!` |
+| Email | Password | Notes |
+|---|---|---|
+| `talhakere@gmail.com` | `Password123!` | Has 14 days of seeded health data |
+| `talhayigit142@gmail.com` | `Password123!` | Empty account |
+| `alex.k.kaczmarczyk@gmail.com` | `Password123!` | Empty account |
+
+Or just register a new account — registration is open.
 
 ---
 
-## Step 6 (optional) — Set up the Google Drive pipeline
+## Development workflow (making changes)
 
-This is only needed if you want to automatically import health data from Google Drive.
-If you just want to use the app with the existing data, skip this.
+When you're actively working on the code, don't run `npm run build` every time you change something.
+Instead, run the backend and frontend separately so you get **hot reload** (the browser updates automatically when you save a file).
 
-### How it works
+**Terminal 1 — Backend:**
+```bash
+node server.js
+```
 
-The pipeline (`HealthsyncServerApp/`) uses a **Google service account** to access Drive:
+**Terminal 2 — Frontend dev server:**
+```bash
+cd frontend
+npm run dev
+```
 
-1. You export health data from Samsung Health as CSVs
-2. Upload them to specific Google Drive folders
-3. Share those folders with the service account email
-4. The pipeline checks every 15 minutes for new files, downloads them, converts them, and inserts them into the DB
-5. After processing, files are deleted from Drive automatically
+Then open **http://localhost:5173** (not 3000) — that's the Vite dev server with hot reload.
+API calls from the frontend automatically proxy to the backend on port 3000, so both work together.
 
-### Setting up Google credentials
+When you're done and want to deploy/test the final version:
+```bash
+cd frontend && npm run build && cd ..
+node server.js
+# → open http://localhost:3000
+```
 
-**You need a `service_account.json` file.** Here's how to get one:
+---
+
+## Code structure — where to find everything
+
+```
+HealthSyncVmServerClient/
+│
+├── server.js                         # The entire backend in one file
+│   ├── PostgreSQL connection pool
+│   ├── JWT auth middleware
+│   └── All API routes (/api/login, /api/register, /api/health/*, etc.)
+│
+├── .env                              # Your config (you create this — never commit it)
+├── healthsync_dump.sql               # Full DB export — reimport if DB gets messed up
+├── seed_users.js                     # Creates test users with fake data: node seed_users.js
+├── send_reminder.js                  # Sends daily health reminder emails: node send_reminder.js
+│
+├── frontend/src/
+│   ├── views/                        # One file per page
+│   │   ├── LoginView.vue             # /login
+│   │   ├── RegisterView.vue          # /register
+│   │   ├── DashboardView.vue         # /dashboard — main overview
+│   │   ├── HealthView.vue            # /health — heart rate & oxygen
+│   │   ├── SleepView.vue             # /sleep
+│   │   ├── ActivityView.vue          # /activity
+│   │   ├── AchievementsView.vue      # /achievements
+│   │   ├── SettingsView.vue          # /settings — goals, email prefs
+│   │   ├── ImportView.vue            # /import — upload CSVs manually
+│   │   ├── ForgotPasswordView.vue    # /forgot-password
+│   │   └── ResetPasswordView.vue     # /reset-password
+│   │
+│   ├── components/                   # Reusable pieces used across pages
+│   │   ├── Sidebar.vue               # Navigation sidebar
+│   │   ├── StatCard.vue              # The metric cards (steps, bpm, etc.)
+│   │   ├── WeeklyOverview.vue        # Bar chart component
+│   │   ├── SummaryWidget.vue
+│   │   ├── StreakWidget.vue
+│   │   ├── AchievementsWidget.vue
+│   │   ├── DailyQuests.vue
+│   │   └── TipsWidget.vue
+│   │
+│   ├── router.js                     # URL → page mapping + auth guards
+│   ├── App.vue                       # Root component (wraps everything)
+│   └── main.js                       # App entry point
+│
+└── HealthsyncServerApp/              # Python data pipeline (Sprint 1)
+    ├── src/pipeline/
+    │   ├── pipeline.py               # Main loop — polls every 15 min
+    │   ├── download_gdrive.py        # Downloads CSVs from Google Drive
+    │   └── converters/               # One script per data type
+    │       ├── convert_steps.py
+    │       ├── convert_sleep.py
+    │       ├── convert_heart_rate.py
+    │       ├── convert_oxygen.py
+    │       ├── convert_activities.py
+    │       └── run_all.py            # Runs all converters in sequence
+    └── service_account.json          # Google credentials (you add this — not in git)
+```
+
+### Adding a new page
+
+1. Create `frontend/src/views/MyNewView.vue`
+2. Add it to `frontend/src/router.js`:
+   ```js
+   import MyNewView from './views/MyNewView.vue'
+   // then in the routes array:
+   { path: '/my-page', name: 'MyPage', component: MyNewView, meta: { requiresAuth: true } }
+   ```
+3. Add a link in `frontend/src/components/Sidebar.vue`
+
+### Adding a new API endpoint
+
+Add it to `server.js`. Protected routes use the `authenticateToken` middleware:
+
+```js
+app.get('/api/my-endpoint', authenticateToken, async (req, res) => {
+  const userEmail = req.user.email  // logged-in user's email
+  // do DB stuff
+  res.json({ data: 'something' })
+})
+```
+
+### How auth works
+
+- On login, the backend creates a **JWT token** (signed with `JWT_SECRET`) and sends it to the browser
+- The browser stores it in `localStorage` as `hs_token`
+- Every API request sends it in the `Authorization: Bearer <token>` header
+- The `authenticateToken` middleware in `server.js` checks it
+- `router.js` has a navigation guard: if there's no token in localStorage, it redirects to `/login`
+
+---
+
+## Google Drive pipeline setup (optional)
+
+Only needed if you want live data auto-imported from Samsung Health.
+
+### Get a service account
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project (or use an existing one)
-3. Go to **APIs & Services → Library** and enable **Google Drive API**
-4. Go to **APIs & Services → Credentials → Create Credentials → Service Account**
-5. Give it a name, click Create
-6. On the service account page, go to **Keys → Add Key → JSON**
-7. Download the JSON file and save it as `service_account.json` in the `HealthsyncServerApp/` folder
+2. Create a project → enable **Google Drive API**
+3. Go to **Credentials → Create Credentials → Service Account**
+4. On the service account → **Keys → Add Key → JSON**
+5. Save the downloaded file as `service_account.json` inside `HealthsyncServerApp/`
 
-### Share your Drive folders with the service account
+### Share Drive folders with it
 
-1. Open the `service_account.json` file and find the `client_email` field (looks like `something@project.iam.gserviceaccount.com`)
-2. In Google Drive, right-click each of your health data folders → Share → paste that email → give it **Editor** access
+1. Open `service_account.json` and copy the `client_email` value (looks like `name@project.iam.gserviceaccount.com`)
+2. In Google Drive, share each health folder with that email (Editor access)
 
-The pipeline expects folders named with these German keywords (from Samsung Health exports):
-- `Health Sync Aktivitäten` (activities)
-- `Health Sync Puls` (heart rate)
-- `Health Sync Schlaf` (sleep)
-- `Health Sync Schritte` (steps)
-- `Health Sync Sauerstoffsättigung` (oxygen)
+Folder names must match these patterns (from Samsung Health exports):
+- `Health Sync Aktivitäten`
+- `Health Sync Puls`
+- `Health Sync Schlaf`
+- `Health Sync Schritte`
+- `Health Sync Sauerstoffsättigung`
 
 ### Run the pipeline
 
 ```bash
 cd HealthsyncServerApp
-pip install -r requirements.txt  # if you have one, otherwise:
-pip install google-api-python-client google-auth google-auth-oauthlib psycopg2-binary schedule
-
+pip install google-api-python-client google-auth psycopg2-binary schedule
 python src/pipeline/pipeline.py
 ```
 
-It will run once immediately, then repeat every 15 minutes.
+Runs once immediately, then every 15 minutes. Press Ctrl+C to stop.
 
 ---
 
-## Project structure
+## Common errors
 
-```
-HealthSyncVmServerClient/
-│
-├── server.js              # Main backend — Express API + serves frontend
-├── package.json           # Backend Node dependencies
-├── .env                   # Your config (you create this — not in git)
-├── healthsync_dump.sql    # Full DB dump — import this in Step 2
-├── seed_users.js          # Adds test users with fake data (optional)
-├── send_reminder.js       # Script that sends daily email reminders
-├── testlocal.sh           # Linux/Mac startup script
-│
-├── frontend/              # Vue 3 frontend
-│   ├── src/
-│   │   ├── views/         # Full pages: Dashboard, Health, Sleep, Activity, etc.
-│   │   ├── components/    # Reusable bits: Sidebar, charts, widgets
-│   │   ├── router.js      # Which URL goes to which page
-│   │   └── main.js        # App entry point
-│   └── dist/              # Built output (generated by npm run build)
-│
-├── HealthsyncServerApp/   # Python data pipeline (Sprint 1)
-│   ├── src/pipeline/
-│   │   ├── pipeline.py          # Main loop — runs every 15 min
-│   │   ├── download_gdrive.py   # Downloads CSVs from Google Drive
-│   │   └── converters/          # One converter per data type (steps, sleep, etc.)
-│   ├── service_account.json     # Google credentials (you add this — not in git)
-│   └── csv_staging/             # Temp folder for downloaded CSVs (auto-cleaned)
-│
-└── backups/
-    ├── backup_db.sh       # Script to dump the DB to a .sql.gz file
-    └── restore_test.sh    # Script to restore from a backup
-```
+**`password authentication failed for user "healthsync_user"`**
+→ PostgreSQL isn't running or wrong password. Run `sudo systemctl start postgresql` and check `.env`.
 
----
+**`relation "users" does not exist`**
+→ DB import didn't work. Re-run the `psql ... -f healthsync_dump.sql` command from Step 2.
 
-## Troubleshooting
+**Blank white page at localhost:3000**
+→ You didn't build the frontend. Run `cd frontend && npm run build`.
 
-**"password authentication failed"**
-Make sure PostgreSQL is running (`sudo systemctl start postgresql`) and the password in `.env` matches Step 2.
+**`EADDRINUSE: address already in use :::3000`**
+→ Something else is on port 3000. Change `PORT=3000` in `.env` to `3001` and open `http://localhost:3001`.
 
-**Blank page / frontend not loading**
-Run `npm run build` inside the `frontend/` folder.
-
-**Pipeline says "No new CSV files"**
-Either the Drive folders have no new files, or the service account doesn't have access — check that you shared the folders with the service account email.
-
-**Port 3000 already in use**
-Change `PORT=3000` in `.env` to something else like `3001`.
+**`Cannot find module 'dotenv'`**
+→ Run `npm install` in the root folder.
