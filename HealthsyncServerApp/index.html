@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>HealthSync</title>
+</head>
+<body>
+  <h1>HealthSync Dashboard</h1>
+
+  <nav>
+    <button onclick="load('overview')">Overview</button>
+    <button onclick="load('steps')">Steps</button>
+    <button onclick="load('heartrate')">Heart Rate</button>
+    <button onclick="load('sleep')">Sleep</button>
+    <button onclick="load('oxygen')">Oxygen</button>
+    <button onclick="load('activities')">Activities</button>
+  </nav>
+
+  <div id="content"></div>
+
+  <script>
+    function load(section) {
+      fetch('/api/' + section)
+        .then(r => r.json())
+        .then(data => render(section, data));
+    }
+
+    function render(section, data) {
+      if (!data.length) {
+        document.getElementById('content').innerHTML = '<p>No data.</p>';
+        return;
+      }
+      const cols = Object.keys(data[0]);
+      const thead = '<tr>' + cols.map(c => `<th>${c}</th>`).join('') + '</tr>';
+      const tbody = data.map(row =>
+        '<tr>' + cols.map(c => `<td>${row[c] ?? ''}</td>`).join('') + '</tr>'
+      ).join('');
+      document.getElementById('content').innerHTML =
+        `<h2>${section}</h2><table border="1"><thead>${thead}</thead><tbody>${tbody}</tbody></table>`;
+    }
+
+    load('overview');
+  </script>
+</body>
+</html>

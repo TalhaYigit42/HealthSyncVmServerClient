@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+.venv/
+
+# Google OAuth tokens (never commit these)
+credentials.json
+token.json
+
+# Pipeline staging / output (cleared each run)
+csv_staging/
+
+# Environment / secrets
+.env
+service_account.json
+*.log

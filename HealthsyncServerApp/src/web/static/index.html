@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>HealthSync</title>
+  <style>
+    body { font-family: sans-serif; max-width: 900px; margin: 40px auto; padding: 0 20px; }
+    input { display: block; width: 100%; padding: 8px; margin: 6px 0 14px; box-sizing: border-box; }
+    button { padding: 8px 16px; cursor: pointer; }
+    .auth-box { max-width: 360px; border: 1px solid #ccc; padding: 24px; border-radius: 8px; }
+    .auth-box h2 { margin-top: 0; }
+    .error { color: red; font-size: 14px; margin-top: 6px; }
+    .banner { background: #e8f5e9; border: 1px solid #a5d6a7; padding: 12px 16px; border-radius: 6px; margin-bottom: 16px; }
+    .banner.warn { background: #fff8e1; border-color: #ffe082; }
+    #user-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+    nav button { margin-right: 4px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: left; }
+    th { background: #f5f5f5; }
+  </style>
+</head>
+<body>
+
+  <!-- Auth section (shown when logged out) -->
+  <div id="auth-section">
+    <h1>HealthSync</h1>
+    <div class="auth-box">
+      <h2 id="auth-title">Anmelden</h2>
+      <div id="register-name-group" style="display:none">
+        <label>Name</label>
+        <input id="input-name" type="text" placeholder="Max Mustermann">
+      </div>
+      <label>E-Mail</label>
+      <input id="input-email" type="email" placeholder="max@example.com">
+      <label>Passwort</label>
+      <input id="input-password" type="password" placeholder="••••••••">
+      <button onclick="submitAuth()">Weiter</button>
+      <button onclick="toggleMode()" style="background:none;border:none;color:#1976d2;padding:8px 0">
+        <span id="toggle-text">Noch kein Konto? Registrieren</span>
+      </button>
+      <div id="auth-error" class="error"></div>
+    </div>
+  </div>
+
+  <!-- Dashboard section (shown when logged in) -->
+  <div id="dashboard-section" style="display:none">
+    <div id="user-bar">
+      <strong>HealthSync</strong>
+      <span id="user-name"></span>
+      <button onclick="logout()">Abmelden</button>
+    </div>
+
+    <div id="drive-banner" style="display:none" class="banner warn">
+      Google Drive noch nicht verbunden — Daten werden nicht automatisch aktualisiert.
+      <button onclick="connectDrive()">Google Drive verbinden</button>
+    </div>
+    <div id="drive-ok-banner" style="display:none" class="banner">
+      Google Drive verbunden. Daten werden alle 15 Minuten aktualisiert.
+    </div>
+
+    <nav>
+      <button onclick="load('overview')">Overview</button>
+      <button onclick="load('steps')">Steps</button>
+      <button onclick="load('heartrate')">Heart Rate</button>
+      <button onclick="load('sleep')">Sleep</button>
+      <button onclick="load('oxygen')">Oxygen</button>
+      <button onclick="load('activities')">Activities</button>
+      <button onclick="load('tips')">Tips</button>
+    </nav>
+
+    <div id="content"></div>
+  </div>
+
+  <script>
+    let isRegister = false;
+    let currentUser = null;
+
+    function toggleMode() {
+      isRegister = !isRegister;
+      document.getElementById('auth-title').textContent = isRegister ? 'Registrieren' : 'Anmelden';
+      document.getElementById('toggle-text').textContent = isRegister
+        ? 'Bereits registriert? Anmelden'
+        : 'Noch kein Konto? Registrieren';
+      document.getElementById('register-name-group').style.display = isRegister ? 'block' : 'none';
+      document.getElementById('auth-error').textContent = '';
+    }
+
+    async function submitAuth() {
+      const email = document.getElementById('input-email').value.trim();
+      const password = document.getElementById('input-password').value;
+      const name = document.getElementById('input-name').value.trim();
+      const errEl = document.getElementById('auth-error');
+      errEl.textContent = '';
+
+      const url = isRegister ? '/api/register' : '/api/login';
+      const body = isRegister ? { name, email, password } : { email, password };
+
+      try {
+        const r = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await r.json();
+        if (!r.ok) { errEl.textContent = data.error; return; }
+        localStorage.setItem('token', data.token);
+        currentUser = data.user;
+        showDashboard();
+      } catch {
+        errEl.textContent = 'Verbindungsfehler';
+      }
+    }
+
+    function logout() {
+      localStorage.removeItem('token');
+      currentUser = null;
+      document.getElementById('auth-section').style.display = 'block';
+      document.getElementById('dashboard-section').style.display = 'none';
+    }
+
+    function connectDrive() {
+      const token = localStorage.getItem('token');
+      window.location.href = `/api/auth/google?token=${token}`;
+    }
+
+    function showDashboard() {
+      document.getElementById('auth-section').style.display = 'none';
+      document.getElementById('dashboard-section').style.display = 'block';
+      document.getElementById('user-name').textContent = currentUser.name || currentUser.email;
+
+      if (currentUser.has_drive) {
+        document.getElementById('drive-ok-banner').style.display = 'block';
+        document.getElementById('drive-banner').style.display = 'none';
+      } else {
+        document.getElementById('drive-banner').style.display = 'block';
+        document.getElementById('drive-ok-banner').style.display = 'none';
+      }
+
+      // Check if redirected after Drive connection
+      if (new URLSearchParams(window.location.search).get('connected') === '1') {
+        currentUser.has_drive = true;
+        document.getElementById('drive-ok-banner').style.display = 'block';
+        document.getElementById('drive-banner').style.display = 'none';
+        history.replaceState({}, '', '/');
+      }
+
+      load('overview');
+    }
+
+    function token() { return localStorage.getItem('token'); }
+
+    async function load(section) {
+      const r = await fetch('/api/' + section, {
+        headers: token() ? { 'Authorization': 'Bearer ' + token() } : {},
+      });
+      const data = await r.json();
+      render(section, data);
+    }
+
+    function render(section, data) {
+      if (!Array.isArray(data) || !data.length) {
+        document.getElementById('content').innerHTML = '<p>Keine Daten.</p>';
+        return;
+      }
+      const allCols = Object.keys(data[0]);
+      const cols = allCols.filter(c => data.some(row => row[c] != null && row[c] !== ''));
+      const thead = '<tr>' + cols.map(c => `<th>${c}</th>`).join('') + '</tr>';
+      const tbody = data.map(row =>
+        '<tr>' + cols.map(c => `<td>${row[c] ?? ''}</td>`).join('') + '</tr>'
+      ).join('');
+      document.getElementById('content').innerHTML =
+        `<h2>${section}</h2><table><thead>${thead}</thead><tbody>${tbody}</tbody></table>`;
+    }
+
+    // On load: check for existing token
+    (async () => {
+      const t = localStorage.getItem('token');
+      if (!t) return;
+      try {
+        const r = await fetch('/api/me', { headers: { 'Authorization': 'Bearer ' + t } });
+        if (!r.ok) { localStorage.removeItem('token'); return; }
+        currentUser = await r.json();
+        showDashboard();
+      } catch {}
+    })();
+  </script>
+</body>
+</html>
